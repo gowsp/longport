@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option go_package = "github.com/gowsp/app/pkg/longport/control";
+package longportapp.control.v1;
+
+message Error {
+  uint64 code = 1;
+  string msg = 2;
+}
