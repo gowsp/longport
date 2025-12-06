@@ -13,6 +13,8 @@ type QuoteConn interface {
 	QueryMarketTradePeriod() (*quotev1.MarketTradePeriodResponse, error)
 	// 查询标的基础信息
 	QuerySymbolStaticInfo(symbols ...string) (*quotev1.SecurityStaticInfoResponse, error)
+	// 获取标的实时行情
+	QuerySymbolQuote(symbols ...string) (*quotev1.SecurityQuoteResponse, error)
 }
 type quoteConn struct {
 	*websocket
@@ -31,5 +33,13 @@ func (w *quoteConn) QuerySymbolStaticInfo(symbols ...string) (*quotev1.SecurityS
 	}
 	rsp := new(quotev1.SecurityStaticInfoResponse)
 	err := w.Rpc(quotev1.Command_QuerySecurityStaticInfo, &req, rsp)
+	return rsp, err
+}
+func (w *quoteConn) QuerySymbolQuote(symbols ...string) (*quotev1.SecurityQuoteResponse, error) {
+	req := quotev1.MultiSecurityRequest{
+		Symbol: symbols,
+	}
+	rsp := new(quotev1.SecurityQuoteResponse)
+	err := w.Rpc(quotev1.Command_QuerySecurityQuote, &req, rsp)
 	return rsp, err
 }
