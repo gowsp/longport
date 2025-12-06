@@ -57,11 +57,11 @@ type Longport struct {
 }
 
 func (l *Longport) ConnQuote() QuoteConn {
-	url := fmt.Sprintf("wss://openapi-%s."+l.Host+"?version=1&codec=1&platform=9", QUOTE)
+	url := fmt.Sprintf("wss://openapi-quote.%s?version=1&codec=1&platform=9", l.Host)
 	return &quoteConn{websocket: &websocket{api: l, url: url}}
 }
 func (l *Longport) ConnTrade() TradeConn {
-	url := fmt.Sprintf("wss://openapi-%s."+l.Host+"?version=1&codec=1&platform=9", TRADE)
+	url := fmt.Sprintf("wss://openapi-trade.%s?version=1&codec=1&platform=9", l.Host)
 	return &tradeConn{websocket: &websocket{api: l, url: url}}
 }
 

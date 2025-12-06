@@ -18,13 +18,6 @@ import (
 
 type rpc func(body *Body, err error)
 
-type ConnType string
-
-const (
-	QUOTE ConnType = "quote"
-	TRADE ConnType = "trade"
-)
-
 type websocket struct {
 	start sync.Once
 
