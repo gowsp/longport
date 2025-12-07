@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/gowsp/longport.svg)](https://pkg.go.dev/github.com/gowsp/longport)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gowsp/longport)](https://goreportcard.com/report/github.com/gowsp/longport)
 
-LongPort Go SDK 为 Go 语言应用提供了便捷的 LongPort API 访问方式。
+LongPort Go SDK 是一个为 Go 语言开发者提供的 LongPort OpenAPI 客户端库，允许开发者轻松访问 LongPort 的各种金融功能。
 
 ## 功能特性
 
@@ -12,6 +12,7 @@ LongPort Go SDK 为 Go 语言应用提供了便捷的 LongPort API 访问方式�
 - WebSocket 连接用于实时行情和交易更新
 - 结构化的数据模型用于所有 API 响应
 - 全面的错误处理机制
+- 支持多种订单类型和交易功能
 
 ## 环境要求
 
@@ -33,9 +34,9 @@ $ go get github.com/gowsp/longport
 import "github.com/gowsp/longport"
 ```
 
-### 认证
+### 创建客户端
 
-要与 API 进行认证，您需要使用您的凭据创建一个 LongPort 客户端：
+要与 API 进行交互，您需要使用您的凭据创建一个 LongPort 客户端：
 
 ```go
 client := &longport.Longport{
@@ -57,8 +58,20 @@ if err != nil {
     // 处理错误
 }
 
+// 获取指定币种的现金信息
+usdCash, err := client.GetCash(longport.USD)
+if err != nil {
+    // 处理错误
+}
+
 // 获取股票持仓
 stocks, err := client.GetStock()
+if err != nil {
+    // 处理错误
+}
+
+// 获取特定股票持仓
+specificStocks, err := client.GetStock("AAPL.US", "GOOG.US")
 if err != nil {
     // 处理错误
 }
@@ -71,7 +84,7 @@ if err != nil {
 order := longport.SubmitOrder{
     BaseOrder: &longport.BaseOrder{
         Symbol:    "AAPL.US",
-        OrderType: longport.LO,
+        OrderType: longport.LO,  // 限价单
         Side:      longport.Buy,
     },
     TimeInForce:       longport.Day,
@@ -84,8 +97,50 @@ if err != nil {
     // 处理错误
 }
 
+// 修改订单
+modifyOrder := longport.ModifyOrder{
+    OrderID:  rsp.OrderID,
+    Quantity: decimal.NewFromInt(20),
+    Price:    "155.00",
+}
+err = client.ModifyOrder(modifyOrder)
+if err != nil {
+    // 处理错误
+}
+
 // 撤销订单
-err = client.CancelOrder("order-id")
+err = client.CancelOrder(rsp.OrderID)
+if err != nil {
+    // 处理错误
+}
+
+// 获取今日订单
+orders, err := client.ListTodayOrder(longport.OrderQuery{
+    Symbol: "AAPL.US",
+    Side:   longport.Buy,
+})
+if err != nil {
+    // 处理错误
+}
+
+// 获取历史订单
+historyOrders, err := client.ListHistoryOrder(longport.HistoryQuery{
+    OrderQuery: &longport.OrderQuery{
+        Symbol: "AAPL.US",
+    },
+    Start: time.Now().AddDate(0, 0, -7).Unix(), // 7天前
+    End:   time.Now().Unix(),
+})
+if err != nil {
+    // 处理错误
+}
+
+// 预估最大购买数量
+buyLimit, err := client.MaxOrderNum(longport.BuyLimitReq{
+    Symbol:    "AAPL.US",
+    OrderType: longport.LO,
+    Side:      longport.Buy,
+})
 if err != nil {
     // 处理错误
 }
@@ -101,6 +156,70 @@ quoteConn := client.ConnQuote()
 
 // 查询标的证券信息
 info, err := quoteConn.QuerySymbolStaticInfo("AAPL.US")
+if err != nil {
+    // 处理错误
+}
+
+// 查询多个标的证券信息
+infos, err := quoteConn.QuerySymbolStaticInfo("AAPL.US", "GOOG.US")
+if err != nil {
+    // 处理错误
+}
+
+// 查询实时行情
+quotes, err := quoteConn.QuerySymbolQuote("AAPL.US")
+if err != nil {
+    // 处理错误
+}
+
+// 订阅实时价格推送
+quoteConn.OnPushQuote(func(quote *quotev1.PushQuote) {
+    fmt.Printf("收到价格推送: %+v\n", quote)
+})
+
+// 订阅实时盘口推送
+quoteConn.OnPushDepth(func(depth *quotev1.PushDepth) {
+    fmt.Printf("收到盘口推送: %+v\n", depth)
+})
+
+// 订阅实时经纪队列推送
+quoteConn.OnPushBrokers(func(brokers *quotev1.PushBrokers) {
+    fmt.Printf("收到经纪队列推送: %+v\n", brokers)
+})
+
+// 订阅实时成交明细推送
+quoteConn.OnPushTrade(func(trade *quotev1.PushTrade) {
+    fmt.Printf("收到成交明细推送: %+v\n", trade)
+})
+
+// 订阅行情数据
+subscribeResp, err := quoteConn.Subscribe(&quotev1.SubscribeRequest{
+    Symbol: []string{"AAPL.US"},
+    SubType: []quotev1.SubType{
+        quotev1.SubType_QUOTE, 
+        quotev1.SubType_DEPTH,
+        quotev1.SubType_BROKER,
+        quotev1.SubType_TRADE,
+    },
+})
+if err != nil {
+    // 处理错误
+}
+
+// 获取已订阅标的
+subscriptionList, err := quoteConn.ListSubscription()
+if err != nil {
+    // 处理错误
+}
+
+// 取消订阅
+err = quoteConn.Unsubscribe(&quotev1.UnsubscribeRequest{
+    Symbol: []string{"AAPL.US"},
+    SubType: []quotev1.SubType{
+        quotev1.SubType_QUOTE, 
+        quotev1.SubType_DEPTH,
+    },
+})
 if err != nil {
     // 处理错误
 }
@@ -120,7 +239,37 @@ err := tradeConn.Subscribe(func(event *longport.OrderEvent) {
 if err != nil {
     // 处理错误
 }
+
+// 取消订阅
+err = tradeConn.Unsubscribe()
+if err != nil {
+    // 处理错误
+}
 ```
+
+## 支持的订单类型
+
+SDK 支持以下订单类型：
+
+- `LO`: 限价单
+- `ELO`: 增强限价单
+- `MO`: 市价单
+- `AO`: 竞价市价单
+- `ALO`: 竞价限价单
+- `ODD`: 碎股单挂单
+- `LIT`: 触价限价单
+- `MIT`: 触价市价单
+- `TSLPAMT`: 跟踪止损限价单 (跟踪金额)
+- `TSLPPCT`: 跟踪止损限价单 (跟踪涨跌幅)
+- `TSMAMT`: 跟踪止损市价单 (跟踪金额)
+- `TSMPCT`: 跟踪止损市价单 (跟踪涨跌幅)
+- `SLO`: 特殊限价单
+
+## 支持的时间类型
+
+- `Day`: 当日有效
+- `GTC`: 撤单前有效
+- `GTD`: 到期前有效
 
 ## API 文档
 
