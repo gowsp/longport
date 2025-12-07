@@ -16,6 +16,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Method interface {
@@ -58,7 +60,7 @@ type Longport struct {
 
 func (l *Longport) ConnQuote() QuoteConn {
 	url := fmt.Sprintf("wss://openapi-quote.%s?version=1&codec=1&platform=9", l.Host)
-	return &quoteConn{websocket: &websocket{api: l, url: url}}
+	return &quoteConn{websocket: &websocket{api: l, url: url}, handlers: make(map[byte]func(proto.Message))}
 }
 func (l *Longport) ConnTrade() TradeConn {
 	url := fmt.Sprintf("wss://openapi-trade.%s?version=1&codec=1&platform=9", l.Host)
