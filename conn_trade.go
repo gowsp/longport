@@ -51,7 +51,7 @@ func (t *tradeConn) decode(n *tradev1.Notification) (*OrderEvent, error) {
 	return event, errors.New("not found")
 }
 func (t *tradeConn) Subscribe(handler func(*OrderEvent)) error {
-	t.websocket.Subscribe(func(event *Event) error {
+	t.websocket.Subscribe(func(event *event) error {
 		switch event.Cmd {
 		case byte(tradev1.Command_CMD_NOTIFY):
 			notify := new(tradev1.Notification)

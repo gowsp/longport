@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type rpc func(body *Body, err error)
+type rpc func(body *body, err error)
 
 type websocket struct {
 	start sync.Once
@@ -27,7 +27,7 @@ type websocket struct {
 	conn net.Conn
 	rid  atomic.Uint32
 
-	handler func(event *Event) error
+	handler func(event *event) error
 }
 
 func (w *websocket) Rpc(cmd byte, req proto.Message, rsp proto.Message) error {
@@ -36,7 +36,7 @@ func (w *websocket) Rpc(cmd byte, req proto.Message, rsp proto.Message) error {
 	})
 	return w.rpc(cmd, req, rsp)
 }
-func (w *websocket) Subscribe(handler func(body *Event) error) {
+func (w *websocket) Subscribe(handler func(body *event) error) {
 	w.handler = handler
 }
 func (w *websocket) rpc(cmd byte, req proto.Message, rsp proto.Message) error {
@@ -46,7 +46,7 @@ func (w *websocket) rpc(cmd byte, req proto.Message, rsp proto.Message) error {
 		return err
 	}
 	res := make(chan error, 1)
-	var rpc rpc = func(body *Body, err error) {
+	var rpc rpc = func(body *body, err error) {
 		if err == nil {
 			err = body.UnmarshalProto(rsp)
 		}
@@ -147,7 +147,7 @@ func (w *websocket) hanlde(p *packet) {
 		rs.body.UnmarshalProto(rsp)
 		val.(rpc)(rs.body, errors.New(rsp.Msg))
 	case 3:
-		event := new(Event)
+		event := new(event)
 		if err := event.UnmarshalBinary(p.data); err != nil {
 			log.Println(err)
 		} else {

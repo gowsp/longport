@@ -11,35 +11,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MsgType represents the type of message being sent or received
-type MsgType uint32
+// msgType represents the type of message being sent or received
+type msgType uint32
 
 const (
-	REQUEST  MsgType = 1 // Outgoing request message
-	RESPONSE MsgType = 2 // Incoming response message
-	PUSH     MsgType = 3 // Server-initiated push message
+	REQUEST  msgType = 1 // Outgoing request message
+	RESPONSE msgType = 2 // Incoming response message
+	PUSH     msgType = 3 // Server-initiated push message
 )
 
-// Header represents the message header containing metadata
-type Header struct {
+// header represents the message header containing metadata
+type header struct {
 	Type    uint8 // Message type
 	Verify  uint8 // Verification flag
 	Gzip    uint8 // Compression flag
 	Reserve uint8 // Reserved field
 }
 
-func (h *Header) MarshalBinary() (data []byte, err error) {
+func (h *header) MarshalBinary() (data []byte, err error) {
 	b := (h.Type & 0xf) | ((h.Verify & 0x1) << 4) | ((h.Gzip & 0x1) << 5) | ((h.Reserve & 0x3) << 6)
 	data = append(data, b)
 	return
 }
 
-type Body struct {
+type body struct {
 	gzip uint8
 	body []byte
 }
 
-func (b *Body) UnmarshalProto(msg proto.Message) error {
+func (b *body) UnmarshalProto(msg proto.Message) error {
 	if b.gzip == 0 {
 		return proto.Unmarshal(b.body, msg)
 	}
@@ -53,38 +53,38 @@ func (b *Body) UnmarshalProto(msg proto.Message) error {
 	}
 	return proto.Unmarshal(data, msg)
 }
-func (b *Body) MarshalBinary() (data []byte, err error) {
+func (b *body) MarshalBinary() (data []byte, err error) {
 	len := len(b.body)
 	data = binary.BigEndian.AppendUint32(data, uint32(len))
 	data = append(data, b.body...)
 	return
 }
-func (b *Body) UnmarshalBinary(data []byte) error {
+func (b *body) UnmarshalBinary(data []byte) error {
 	data[0] = 0
 	len := binary.BigEndian.Uint32(data)
 	b.body = data[4 : 4+len]
 	return nil
 }
 
-func wsRequst(id uint32, cmd byte, body proto.Message) ([]byte, error) {
+func wsRequst(id uint32, cmd byte, msg proto.Message) ([]byte, error) {
 	var err error
 	var data []byte
-	if body != nil {
-		data, err = proto.Marshal(body)
+	if msg != nil {
+		data, err = proto.Marshal(msg)
 		if err != nil {
 			return nil, err
 		}
 	}
-	req := Request{cmd: cmd, id: id, timeout: 60000, body: &Body{body: data}}
+	req := request{cmd: cmd, id: id, timeout: 60000, body: &body{body: data}}
 	if data, err = req.MarshalBinary(); err != nil {
 		return nil, err
 	}
-	p := &packet{header: &Header{Type: uint8(REQUEST)}, data: data}
+	p := &packet{header: &header{Type: uint8(REQUEST)}, data: data}
 	return p.MarshalBinary()
 }
 
 type packet struct {
-	header *Header
+	header *header
 	data   []byte
 }
 
@@ -99,7 +99,7 @@ func (r *packet) MarshalBinary() (data []byte, err error) {
 }
 
 func (r *packet) UnmarshalBinary(data []byte) error {
-	h := new(Header)
+	h := new(header)
 	b := data[0]
 	h.Type = 0xf & b
 	h.Verify = b >> 4 & 0x1
@@ -110,14 +110,14 @@ func (r *packet) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-type Request struct {
+type request struct {
 	id      uint32
 	cmd     byte
 	timeout uint16
-	body    *Body
+	body    *body
 }
 
-func (r *Request) MarshalBinary() (data []byte, err error) {
+func (r *request) MarshalBinary() (data []byte, err error) {
 	data = append(data, r.cmd)
 	data = binary.BigEndian.AppendUint32(data, r.id)
 	data = binary.BigEndian.AppendUint16(data, r.timeout)
@@ -133,27 +133,27 @@ type response struct {
 	id     uint32
 	cmd    byte
 	status byte
-	body   *Body
+	body   *body
 }
 
 func (r *response) UnmarshalBinary(data []byte) error {
 	r.cmd = data[0]
 	r.id = binary.BigEndian.Uint32(data[1:])
 	r.status = data[5]
-	r.body = new(Body)
+	r.body = new(body)
 	return r.body.UnmarshalBinary(data[5:])
 }
 
-type Event struct {
+type event struct {
 	Cmd  byte
-	body *Body
+	body *body
 }
 
-func (p *Event) UnmarshalProto(msg proto.Message) error {
+func (p *event) UnmarshalProto(msg proto.Message) error {
 	return p.body.UnmarshalProto(msg)
 }
-func (p *Event) UnmarshalBinary(data []byte) error {
+func (p *event) UnmarshalBinary(data []byte) error {
 	p.Cmd = data[0]
-	p.body = new(Body)
+	p.body = new(body)
 	return p.body.UnmarshalBinary(data)
 }
