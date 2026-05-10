@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +19,8 @@ import (
 )
 
 type rpc func(body *body, err error)
+
+const defaultRPCTimeout = 15 * time.Second
 
 type websocket struct {
 	start sync.Once
@@ -31,9 +35,16 @@ type websocket struct {
 }
 
 func (w *websocket) Rpc(cmd byte, req proto.Message, rsp proto.Message) error {
+	var err error
 	w.start.Do(func() {
-		w.connect()
+		err = w.connect()
 	})
+	if err != nil {
+		return err
+	}
+	if w.conn == nil {
+		return errors.New("websocket not connected")
+	}
 	return w.rpc(cmd, req, rsp)
 }
 func (w *websocket) Subscribe(handler func(body *event) error) {
@@ -55,10 +66,18 @@ func (w *websocket) rpc(cmd byte, req proto.Message, rsp proto.Message) error {
 	w.req.Store(id, rpc)
 	err = wsutil.WriteClientBinary(w.conn, auth)
 	if err != nil {
+		w.req.Delete(id)
 		return err
 	}
-	result := <-res
-	return result
+	timer := time.NewTimer(rpcTimeout())
+	defer timer.Stop()
+	select {
+	case result := <-res:
+		return result
+	case <-timer.C:
+		w.req.Delete(id)
+		return fmt.Errorf("websocket rpc timeout: cmd=%d id=%d", cmd, id)
+	}
 }
 
 func (w *websocket) reconnect() (*controlv1.AuthResponse, error) {
@@ -113,10 +132,12 @@ func (w *websocket) connect() (err error) {
 	return w.login()
 }
 func (w *websocket) serve(reload func() error) {
+	var readErr error
 	for {
 		d, err := wsutil.ReadServerBinary(w.conn)
 		if err != nil {
 			log.Println("read server data error", err)
+			readErr = err
 			break
 		}
 		p := new(packet)
@@ -126,7 +147,22 @@ func (w *websocket) serve(reload func() error) {
 		}
 		w.hanlde(p)
 	}
-	reload()
+	w.failPending(fmt.Errorf("websocket disconnected: %w", readErr))
+	if err := reload(); err != nil {
+		log.Println("reload websocket error", err)
+	}
+}
+
+func (w *websocket) failPending(err error) {
+	w.req.Range(func(key, value any) bool {
+		if id, ok := key.(uint32); ok {
+			w.req.Delete(id)
+		} else {
+			w.req.Delete(key)
+		}
+		value.(rpc)(nil, err)
+		return true
+	})
 }
 
 func (w *websocket) hanlde(p *packet) {
@@ -150,7 +186,7 @@ func (w *websocket) hanlde(p *packet) {
 		event := new(event)
 		if err := event.UnmarshalBinary(p.data); err != nil {
 			log.Println(err)
-		} else {
+		} else if w.handler != nil {
 			w.handler(event)
 		}
 	}
@@ -161,4 +197,20 @@ func (w *websocket) Close() error {
 		return w.conn.Close()
 	}
 	return nil
+}
+
+func rpcTimeout() time.Duration {
+	val := os.Getenv("LONGPORT_RPC_TIMEOUT")
+	if val == "" {
+		return defaultRPCTimeout
+	}
+	timeout, err := time.ParseDuration(val)
+	if err == nil {
+		return timeout
+	}
+	seconds, err := strconv.Atoi(val)
+	if err == nil {
+		return time.Duration(seconds) * time.Second
+	}
+	return defaultRPCTimeout
 }
